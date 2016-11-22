@@ -74,6 +74,7 @@ def parse_body(tokens):
         token, *rest = rest
 
         if token == "'":
+            # TODO: allow multiple quotes in a row (recursion?)
             token, *rest = rest
             assert token != ')'
             quote = True
@@ -127,23 +128,30 @@ def eval(code, env=None):
     return result
 
 
-def eval_env(code, env: Expression=None) -> (Expression, Expression):
+def lookup(atom, env):
+    assert isinstance(atom, Atom)
+    for pair in env.items:
+        assert len(pair.items) == 2
+        if pair.items[0] == atom:
+            return pair.items[1]
+    raise LispRunTimeError('Could not find unknown atom: {}'.format(atom))
+
+
+def eval_env(code, env=None):
     env = env or Expression()
     assert is_expression(code)
 
     if isinstance(code, Atom):
-        for pair in env.items:
-            assert len(pair.items) == 2
-            if pair.items[0] == code:
-                return pair.items[1], env
-        raise LispRunTimeError('Could not evaluate unknown atom: {}'.format(code))
-        # return Expression(), env
+        value = lookup(code, env)
+        return value, env
 
-    if code.items[0] == Atom('quote'):
+    first_arg = code.items[0]
+
+    if first_arg == Atom('quote'):
         assert len(code.items) == 2
         return code.items[1], env
 
-    if code.items[0] == Atom('atom'):
+    if first_arg == Atom('atom'):
         assert len(code.items) == 2
         value = eval(code.items[1], env)
         if isinstance(value, Atom):
@@ -153,7 +161,7 @@ def eval_env(code, env: Expression=None) -> (Expression, Expression):
         else:
             return Expression(), env
 
-    if code.items[0] == Atom('eq'):
+    if first_arg == Atom('eq'):
         assert len(code.items) == 3
         val1 = eval(code.items[1], env)
         val2 = eval(code.items[2], env)
@@ -163,19 +171,19 @@ def eval_env(code, env: Expression=None) -> (Expression, Expression):
             return Atom('t'), env
         return Expression(), env
 
-    if code.items[0] == Atom('car'):
+    if first_arg == Atom('car'):
         assert len(code.items) == 2
         value = eval(code.items[1], env)
         assert isinstance(value, Expression)
         return value.items[0], env
 
-    if code.items[0] == Atom('cdr'):
+    if first_arg == Atom('cdr'):
         assert len(code.items) == 2
         value = eval(code.items[1], env)
         assert isinstance(value, Expression)
         return Expression(value.items[1:]), env
 
-    if code.items[0] == Atom('cons'):
+    if first_arg == Atom('cons'):
         assert len(code.items) == 3
         val1 = eval(code.items[1], env)
         val2 = eval(code.items[2], env)
@@ -183,7 +191,7 @@ def eval_env(code, env: Expression=None) -> (Expression, Expression):
         assert isinstance(val2, Expression)
         return Expression([val1] + val2.items), env
 
-    if code.items[0] == Atom('cond'):
+    if first_arg == Atom('cond'):
         pairs = code.items[1:]
         for cond_pair in pairs:
             assert isinstance(cond_pair, Expression)
@@ -194,17 +202,22 @@ def eval_env(code, env: Expression=None) -> (Expression, Expression):
                 return val2, env
         return Expression(), env
 
-    if code.items[0] == Atom('label'):
+    if first_arg == Atom('label'):
         assert len(code.items) == 3
-        label = code.items[1]
+        label, value = code.items[1:]
         assert isinstance(label, Atom)
-        value = eval(code.items[2], env)
-        env = Expression(env.items + [Expression([label, value])])
-        return Expression(), env
+        # value = eval(code.items[2], env)
+        extended_env = [Expression(code.items[1:])] + env.items
+        return Expression(), Expression(extended_env)
 
-    if isinstance(code.items[0], Expression):
-        if code.items[0].items[0] == Atom('lambda'):
-            _, args, body = code.items[0].items
+    # HACK? BETTER WAY? Yes — use recursive call! ;)
+    if isinstance(first_arg, Atom):
+        value = lookup(first_arg, env)
+        first_arg = value
+
+    if isinstance(first_arg, Expression):
+        if first_arg.items[0] == Atom('lambda'):
+            _, args, body = first_arg.items
             assert isinstance(args, Expression)
             assert isinstance(body, Expression)
             assert len(args.items) == len(code.items) - 1
@@ -214,22 +227,25 @@ def eval_env(code, env: Expression=None) -> (Expression, Expression):
             ])
             result = eval(body, new_env)
             return result, env
-        return LispRunTimeError('Bad callable Expression: {}'.format(code.items[0]))
+        return LispRunTimeError('Bad callable Expression: {}'.format(first_arg))
 
-    raise LispRunTimeError('Unknown command: {}'.format(code.items[0]))
+    raise LispRunTimeError('Unknown command: {}'.format(first_arg))
 
 
 def multi_eval(code, env=None):
     env = env or Expression()
     result = Expression()
-    for expr in code:
-        result, env = eval_env(expr, env)
+
+    commands = parse(code, allow_multi=True)
+    for command in commands:
+        result, env = eval_env(command, env)
     return result, env
 
 
 ############################ TESTS ################################
 
 p = parse
+
 
 def e(source):
     return eval(parse(source))
@@ -289,37 +305,38 @@ def test_eval_cond():
     """) == p('second')
 
 
-# def test_eval_bad():
-#     assert e("(xxx 'a)") == p('(a b c)')
-
 def test_multi_eval_env_persistence():
-    result, env = multi_eval([p("'a")], env=p('((nil ()))'))
+    start_env = p('((nil ()))')
+    result, env = multi_eval("'a", start_env)
     assert result == p('a')
     assert env == p('((nil ()))')
 
 
 def test_multi_eval_label():
-    result, env = multi_eval([
-        p("(label nil '())")
-    ])
+    result, env = multi_eval("(label nil ())")
     assert result == p('()')
     assert env == p('((nil ()))')
 
 
 def test_multi_eval_env_work():
-    result, env = multi_eval([
-        p("(label l '(a b c))"),
-        p("(cdr l)"),
-    ])
+    result, env = multi_eval("""
+        (label l (a b c))
+        (cdr l)
+    """)
     assert result == p('(b c)')
 
 
 def test_lambda():
-    result, env = multi_eval([
-        p("((lambda (x) (cons x '(b c))) 'z)"),
-    ])
-    assert result == p('(z b c)')
+    code = "((lambda (x) (cons x '(b c))) 'z)"
+    expected_result = '(z b c)'
+    result, env = multi_eval(code)
+    assert result == p(expected_result)
 
 
-# def test_eval_from_env():
-#     assert e("xxx") == ''
+def test_labeled_lambda():
+    code = """
+        (label wrap (lambda (x) (cons x '())))
+        (wrap 'wrap_me)
+    """
+    result, env = multi_eval(code)
+    assert result == p('(wrap_me)')
