@@ -221,10 +221,11 @@ def eval_env(code, env=None):
             assert isinstance(args, Expression)
             assert isinstance(body, Expression)
             assert len(args.items) == len(code.items) - 1
-            new_env = Expression([
+            arg_env = [
                 Expression([arg, eval(val, env)])
                 for arg, val in zip(args.items, code.items[1:])
-            ])
+            ]
+            new_env = Expression(arg_env + env.items)
             result = eval(body, new_env)
             return result, env
         return LispRunTimeError('Bad callable Expression: {}'.format(first_arg))
@@ -340,3 +341,19 @@ def test_labeled_lambda():
     """
     result, env = multi_eval(code)
     assert result == p('(wrap_me)')
+
+
+def test_recursion():
+    code = """
+        (label separate
+          (lambda (lst)
+                  (cond
+                    ((eq lst '()) '())
+                    ((eq (cdr lst) '()) lst)
+                    ('t (cons (car lst) (cons '| (separate (cdr lst))))))))
+
+        (separate '(a b c))
+
+    """
+    result, env = multi_eval(code)
+    assert result == p('(a | b | c)')
