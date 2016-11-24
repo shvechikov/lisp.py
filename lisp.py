@@ -158,10 +158,9 @@ def eval_expr(code, env=None):
         new_code = ['label', code[1], ['lambda', code[2], code[3]]]
         return eval_expr(new_code, env)
 
-    # FIXME: HACK? BETTER WAY? Yes - use recursive call! ;)
     if isinstance(first_arg, Atom):
         value = env[first_arg]
-        first_arg = value
+        return eval_expr([value] + code[1:], env)
 
     if isinstance(first_arg, Expression):
         if first_arg[0] == 'lambda':
@@ -252,6 +251,12 @@ hard_tests = [
     """
         (label l (a b c))
         (cdr l)
+        --> (b c)
+    """,
+    """
+        (label l (a b c))
+        (label REST cdr)
+        (REST l)
         --> (b c)
     """,
     """
