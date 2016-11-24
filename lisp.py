@@ -211,11 +211,15 @@ def test_parser():
     assert p('((e) f)') == [['e'], 'f']
     assert p('(g (h))') == ['g', ['h']]
     assert p('(g (h) ())') == ['g', ['h'], []]
+    assert parse('(g) (h)') ==[['g'], ['h']]
+    #assert parse('(g(') ==[['g'], ['h']]
 
 
 base_tests = [
     "(quote a) --> a",
-    # FIXME: "'a --> a"
+    "'a --> a",
+    "''a --> (quote a)",
+    "''() --> (quote ())",
     "(atom (quote a)) --> t",
     "(atom (quote (a b c))) --> ()",
     "(atom (quote ())) --> t",
