@@ -7,18 +7,6 @@ Expression = list
 meta_lisp = open('meta.lisp').read()
 
 
-class LispBaseError(Exception):
-    pass
-
-
-class LispParseError(LispBaseError):
-    pass
-
-
-class LispRunTimeError(LispBaseError):
-    pass
-
-
 def tokenize(source):
     """Tokenize any lisp-like source string.
 
@@ -37,8 +25,7 @@ def parse_expr(tokens):
         return ['quote', expr], tokens
     if tokens[0] == '(':
         expr, tokens = parse_body(tokens[1:])
-        if not tokens or tokens[0] != ')':
-            assert False, 'expected ")", but remaining: %r' % tokens
+        assert tokens and tokens[0] == ')', 'Bad trailing tokens: %r' % tokens
         return expr, tokens[1:]
     return tokens[0], tokens[1:]  # Atom
 
@@ -53,7 +40,7 @@ def parse_body(tokens):
 
 
 def parse(source):
-    """Return list of parsed expressions
+    """Return list of parsed expressions.
 
     >>> parse("(label a 'b) (wrap a)")
     [['label', 'a', ['quote', 'b']], ['wrap', 'a']]
@@ -61,19 +48,17 @@ def parse(source):
     """
     tokens = tokenize(source)
     expr_list, remaining_tokens = parse_body(tokens)
-    assert not remaining_tokens
+    assert not remaining_tokens, 'Bad trailing tokens: {}'.format(remaining_tokens)
     return expr_list
 
 
 def p(source):
-    """Shortcut for parsing single expression"""
+    """Shortcut for parsing single expression."""
     return parse(source)[0]
 
 
-############################ EVAL ################################
-
-
 def eval_expr(code, env=None):
+    """Evaluate single expression."""
     env = env or {}
     assert isinstance(code, (Atom, Expression))
 
@@ -81,60 +66,49 @@ def eval_expr(code, env=None):
         value = env[code]
         return value, env
 
-    first_arg = code[0]
-
-    if first_arg == 'quote':
+    if code[0] == 'quote':
         assert len(code) == 2
         return code[1], env
 
-    if first_arg == 'atom':
+    if code[0] == 'atom':
         assert len(code) == 2
         value, _ = eval_expr(code[1], env)
-        if isinstance(value, Atom):
-            return 't', env
-        elif isinstance(value, Expression) and not value:
-            return 't', env
-        else:
-            return [], env
-
-    if first_arg == 'eq':
-        assert len(code) == 3
-        val1, _ = eval_expr(code[1], env)
-        val2, _ = eval_expr(code[2], env)
-        if isinstance(val1, Atom) and val1 == val2:
-            return 't', env
-        if isinstance(val1, Expression) and not val1 and val1 == val2:
+        if isinstance(value, Atom) or value == []:
             return 't', env
         return [], env
 
-    if first_arg == 'car':
+    if code[0] == 'eq':
+        assert len(code) == 3
+        val1, _ = eval_expr(code[1], env)
+        val2, _ = eval_expr(code[2], env)
+        if (isinstance(val1, Atom) or val1 == []) and val1 == val2:
+            return 't', env
+        return [], env
+
+    if code[0] == 'car':
         assert len(code) == 2
         value, _ = eval_expr(code[1], env)
         assert isinstance(value, Expression)
         if value:
-            car_value = value[0]
-        else:
-            car_value = []
-        return car_value, env
+            return value[0], env
+        return [], env
 
-    if first_arg == 'cdr':
+    if code[0] == 'cdr':
         assert len(code) == 2
         value, _ = eval_expr(code[1], env)
         assert isinstance(value, Expression)
         if value:
             return value[1:], env
-        else:
-            return [], env
+        return [], env
 
-    if first_arg == 'cons':
+    if code[0] == 'cons':
         assert len(code) == 3
         val1, _ = eval_expr(code[1], env)
         val2, _ = eval_expr(code[2], env)
-        # assert isinstance(val1, Atom)
         assert isinstance(val2, Expression)
         return [val1] + val2, env
 
-    if first_arg == 'cond':
+    if code[0] == 'cond':
         pairs = code[1:]
         for cond_pair in pairs:
             assert isinstance(cond_pair, Expression)
@@ -145,7 +119,7 @@ def eval_expr(code, env=None):
                 return val2, env
         return [], env
 
-    if first_arg == 'label':
+    if code[0] == 'label':
         assert len(code) == 3
         label, value = code[1:]
         assert isinstance(label, Atom)
@@ -153,18 +127,18 @@ def eval_expr(code, env=None):
         new_env[label] = value
         return [], new_env
 
-    if first_arg == 'defun':
+    if code[0] == 'defun':
         assert len(code) == 4
         new_code = ['label', code[1], ['lambda', code[2], code[3]]]
         return eval_expr(new_code, env)
 
-    if isinstance(first_arg, Atom):
-        value = env[first_arg]
+    if isinstance(code[0], Atom):
+        value = env[code[0]]
         return eval_expr([value] + code[1:], env)
 
-    if isinstance(first_arg, Expression):
-        if first_arg[0] == 'lambda':
-            _, args, body = first_arg
+    if isinstance(code[0], Expression):
+        if code[0][0] == 'lambda':
+            _, args, body = code[0]
             assert isinstance(args, Expression)
             assert len(args) == len(code) - 1
             arg_env = {
@@ -175,12 +149,13 @@ def eval_expr(code, env=None):
             new_env.update(arg_env)
             result, _ = eval_expr(body, new_env)
             return result, env
-        return LispRunTimeError('Bad callable Expression: {}'.format(first_arg))
+        assert False, 'Bad callable Expression: {}'.format(code[0])
 
-    raise LispRunTimeError('Unknown command: {}'.format(first_arg))
+    assert False, 'Unknown command: {}'.format(code[0])
 
 
 def eval_code(code, env=None):
+    """Evaluate a sequence of expressions by chaining environments."""
     result = Expression()
     commands = parse(code)
     for command in commands:
@@ -189,12 +164,14 @@ def eval_code(code, env=None):
 
 
 def meta_eval(meta_code, env=None):
+    """Evaluate expression using MetaLISP."""
     full_code = meta_lisp + meta_code
     result, env = eval_code(full_code, env)
     return result
 
 
 def e(source):
+    """Shortcut for evaluating expressions in tests."""
     result, new_env = eval_code(source)
     return result
 
@@ -212,7 +189,8 @@ def test_parser():
     assert p('(g (h))') == ['g', ['h']]
     assert p('(g (h) ())') == ['g', ['h'], []]
     assert parse('(g) (h)') ==[['g'], ['h']]
-    #assert parse('(g(') ==[['g'], ['h']]
+    with pytest.raises(AssertionError):
+        parse('(g(')
 
 
 base_tests = [
