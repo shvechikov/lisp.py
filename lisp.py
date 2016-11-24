@@ -141,7 +141,6 @@ def eval_expr(code, env=None):
             assert len(cond_pair) == 2
             val1, _ = eval_expr(cond_pair[0], env)
             if val1 == 't':
-                #!!!
                 val2, _ = eval_expr(cond_pair[1], env)
                 return val2, env
         return [], env
@@ -205,7 +204,6 @@ def e(source):
 
 
 def test_parser():
-    assert 'a' == 'a'
     assert p("'a") == ['quote', 'a']
     assert p('b') == 'b'
     assert p('()') == []
