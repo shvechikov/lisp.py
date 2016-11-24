@@ -259,6 +259,22 @@ hard_tests = [
     """
 ]
 
+meta_tests = [
+    """
+        ((label wrap (lambda (x) (cons x '()))) 'wrap_me)
+        --> (wrap_me)
+    """,
+    """
+        ((label separate (lambda (lst)
+            (cond
+                ((eq (cdr lst) '()) lst)
+                ('t (cons (car lst) (cons '| (separate (cdr lst))))))))
+
+            '(a b c))
+        --> (a | b | c)
+    """
+]
+
 
 def make_params(*test_packs):
     return [pair.split("-->") for pair in sum(test_packs, [])]
@@ -269,7 +285,7 @@ def test_eval(code, result):
     assert e(code) == p(result)
 
 
-@pytest.mark.parametrize("code,result", make_params(base_tests))
+@pytest.mark.parametrize("code,result", make_params(base_tests, meta_tests))
 def test_meta_eval(code, result):
     meta_code = "(eval. '{} '())".format(code)
     assert meta_eval(meta_code) == p(result)
