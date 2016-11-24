@@ -30,51 +30,26 @@ def tokenize(source):
     return tokens
 
 
+def parse_expr(tokens):
+    """Parse single expression. Return it and remaining tokens."""
+    if tokens[0] == "'":
+        expr, tokens = parse_expr(tokens[1:])
+        return ['quote', expr], tokens
+    if tokens[0] == '(':
+        expr, tokens = parse_body(tokens[1:])
+        if not tokens or tokens[0] != ')':
+            assert False, 'expected ")", but remaining: %r' % tokens
+        return expr, tokens[1:]
+    return tokens[0], tokens[1:]  # Atom
+
+
 def parse_body(tokens):
-    rest = list(tokens)
-
-    result = []
-
-    while True:
-        quote = False
-
-        if not rest:
-            return result, []
-
-        token, rest = rest[0], rest[1:]
-
-        if token == "'":
-            # TODO: allow multiple quotes in a row (recursion?)
-            token, rest = rest[0], rest[1:]
-            assert token != ')'
-            quote = True
-
-        if token not in ('(', ')'):
-            atom = token
-            if quote:
-                atom = ['quote', atom]
-            result.append(atom)
-
-        if token == ')':
-            return result, rest
-
-        if token == '(':
-            parsed, rest = parse_body(rest)
-            expr = parsed
-            if quote:
-                expr = ['quote', expr]
-            result.append(expr)
-
-    assert False
-
-
-def parse_tokens(tokens):
-    if not tokens:
-        raise LispParseError('Empty input')
-    parsed, tail = parse_body(tokens)
-    if tail:
-        raise LispParseError('Some tail: {}'.format(tail))
-    return parsed
+    """Parse list of expressions. Return them and remaining tokens."""
+    if tokens and tokens[0] != ')':
+        first_expr, tokens = parse_expr(tokens)
+        rest_list, tokens = parse_body(tokens)
+        return [first_expr] + rest_list, tokens
+    return [], tokens
 
 
 def parse(source):
@@ -85,7 +60,9 @@ def parse(source):
 
     """
     tokens = tokenize(source)
-    return parse_tokens(tokens)
+    expr_list, remaining_tokens = parse_body(tokens)
+    assert not remaining_tokens
+    return expr_list
 
 
 def p(source):
