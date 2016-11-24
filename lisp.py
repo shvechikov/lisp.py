@@ -2,6 +2,8 @@ import re
 import pytest
 
 
+Atom = str
+Expression = list
 meta_lisp = open('meta.lisp').read()
 
 
@@ -28,13 +30,7 @@ def tokenize(source):
     return tokens
 
 
-Atom = str
-Expression = list
-
-
 def parse_body(tokens):
-    """Return expression items"""
-
     rest = list(tokens)
 
     result = []
@@ -45,11 +41,11 @@ def parse_body(tokens):
         if not rest:
             return result, []
 
-        token, *rest = rest
+        token, rest = rest[0], rest[1:]
 
         if token == "'":
             # TODO: allow multiple quotes in a row (recursion?)
-            token, *rest = rest
+            token, rest = rest[0], rest[1:]
             assert token != ')'
             quote = True
 
@@ -72,31 +68,35 @@ def parse_body(tokens):
     assert False
 
 
-def parse_tokens(tokens, allow_multi=False):
-    """Parse expression or multi-expression."""
+def parse_tokens(tokens):
     if not tokens:
         raise LispParseError('Empty input')
-
     parsed, tail = parse_body(tokens)
-    assert not tail, 'Some tail: {}'.format(tail)
-
-    if allow_multi:
-        return parsed
-    else:
-        assert len(parsed) == 1
-        assert isinstance(parsed[0], (Atom, Expression))
-        return parsed[0]
+    if tail:
+        raise LispParseError('Some tail: {}'.format(tail))
+    return parsed
 
 
-def parse(source, allow_multi=False):
+def parse(source):
+    """Return list of parsed expressions
+
+    >>> parse("(label a 'b) (wrap a)")
+    [['label', 'a', ['quote', 'b']], ['wrap', 'a']]
+
+    """
     tokens = tokenize(source)
-    return parse_tokens(tokens, allow_multi)
+    return parse_tokens(tokens)
+
+
+def p(source):
+    """Shortcut for parsing single expression"""
+    return parse(source)[0]
 
 
 ############################ EVAL ################################
 
 
-def eval_env(code, env=None):
+def eval_expr(code, env=None):
     env = env or {}
     assert isinstance(code, (Atom, Expression))
 
@@ -112,7 +112,7 @@ def eval_env(code, env=None):
 
     if first_arg == 'atom':
         assert len(code) == 2
-        value, _ = eval_env(code[1], env)
+        value, _ = eval_expr(code[1], env)
         if isinstance(value, Atom):
             return 't', env
         elif isinstance(value, Expression) and not value:
@@ -122,8 +122,8 @@ def eval_env(code, env=None):
 
     if first_arg == 'eq':
         assert len(code) == 3
-        val1, _ = eval_env(code[1], env)
-        val2, _ = eval_env(code[2], env)
+        val1, _ = eval_expr(code[1], env)
+        val2, _ = eval_expr(code[2], env)
         if isinstance(val1, Atom) and val1 == val2:
             return 't', env
         if isinstance(val1, Expression) and not val1 and val1 == val2:
@@ -132,7 +132,7 @@ def eval_env(code, env=None):
 
     if first_arg == 'car':
         assert len(code) == 2
-        value, _ = eval_env(code[1], env)
+        value, _ = eval_expr(code[1], env)
         assert isinstance(value, Expression)
         if value:
             car_value = value[0]
@@ -142,7 +142,7 @@ def eval_env(code, env=None):
 
     if first_arg == 'cdr':
         assert len(code) == 2
-        value, _ = eval_env(code[1], env)
+        value, _ = eval_expr(code[1], env)
         assert isinstance(value, Expression)
         if value:
             return value[1:], env
@@ -151,8 +151,8 @@ def eval_env(code, env=None):
 
     if first_arg == 'cons':
         assert len(code) == 3
-        val1, _ = eval_env(code[1], env)
-        val2, _ = eval_env(code[2], env)
+        val1, _ = eval_expr(code[1], env)
+        val2, _ = eval_expr(code[2], env)
         # assert isinstance(val1, Atom)
         assert isinstance(val2, Expression)
         return [val1] + val2, env
@@ -162,10 +162,10 @@ def eval_env(code, env=None):
         for cond_pair in pairs:
             assert isinstance(cond_pair, Expression)
             assert len(cond_pair) == 2
-            val1, _ = eval_env(cond_pair[0], env)
+            val1, _ = eval_expr(cond_pair[0], env)
             if val1 == 't':
                 #!!!
-                val2, _ = eval_env(cond_pair[1], env)
+                val2, _ = eval_expr(cond_pair[1], env)
                 return val2, env
         return [], env
 
@@ -180,9 +180,9 @@ def eval_env(code, env=None):
     if first_arg == 'defun':
         assert len(code) == 4
         new_code = ['label', code[1], ['lambda', code[2], code[3]]]
-        return eval_env(new_code, env)
+        return eval_expr(new_code, env)
 
-    # FIXME: HACK? BETTER WAY? Yes — use recursive call! ;)
+    # FIXME: HACK? BETTER WAY? Yes - use recursive call! ;)
     if isinstance(first_arg, Atom):
         value = env[first_arg]
         first_arg = value
@@ -193,42 +193,38 @@ def eval_env(code, env=None):
             assert isinstance(args, Expression)
             assert len(args) == len(code) - 1
             arg_env = {
-                arg: eval_env(val, env)[0]
+                arg: eval_expr(val, env)[0]
                 for arg, val in zip(args, code[1:])
             }
             new_env = env.copy()
             new_env.update(arg_env)
-            result, _ = eval_env(body, new_env)
+            result, _ = eval_expr(body, new_env)
             return result, env
         return LispRunTimeError('Bad callable Expression: {}'.format(first_arg))
 
     raise LispRunTimeError('Unknown command: {}'.format(first_arg))
 
 
-def multi_eval(code, env=None):
+def eval_code(code, env=None):
     result = Expression()
-
-    commands = parse(code, allow_multi=True)
+    commands = parse(code)
     for command in commands:
-        result, env = eval_env(command, env)
+        result, env = eval_expr(command, env)
     return result, env
 
 
 def meta_eval(meta_code, env=None):
     full_code = meta_lisp + meta_code
-    result, env = multi_eval(full_code, env)
+    result, env = eval_code(full_code, env)
+    return result
+
+
+def e(source):
+    result, new_env = eval_code(source)
     return result
 
 
 ############################ TESTS ################################
-
-
-def e(source):
-    result, new_env = multi_eval(source)
-    return result
-
-
-p = parse
 
 
 def test_parser():
@@ -302,16 +298,16 @@ hard_tests = [
 ]
 
 
-def prepare(*test_packs):
-    return [pair.split(" --> ") for pair in sum(test_packs, [])]
+def make_params(*test_packs):
+    return [pair.split("-->") for pair in sum(test_packs, [])]
 
 
-@pytest.mark.parametrize("code,result", prepare(base_tests, hard_tests))
+@pytest.mark.parametrize("code,result", make_params(base_tests, hard_tests))
 def test_eval(code, result):
     assert e(code) == p(result)
 
 
-@pytest.mark.parametrize("code,result", prepare(base_tests))
+@pytest.mark.parametrize("code,result", make_params(base_tests))
 def test_meta_eval(code, result):
     meta_code = "(eval. '{} '())".format(code)
     assert meta_eval(meta_code) == p(result)
