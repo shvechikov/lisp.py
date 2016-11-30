@@ -3,4 +3,4 @@
 	./.env/bin/pip install -r requirements.txt
 
 test: .env
-	./.env/bin/pytest --doctest-modules lisp.py
+	./.env/bin/pytest tests.py
