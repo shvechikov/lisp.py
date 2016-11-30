@@ -48,7 +48,7 @@ def is_pair(data):
 
 
 class Lisp:
-    BUILTIN_FUNCTIONS = 'quote atom eq car cdr cons cond label defun'.split()
+    BUILTIN_FUNCTIONS = 'quote atom eq car cdr cons cond label defun add sub lt'.split()
 
     def __init__(self, env=None):
         self.env = env or {}
@@ -71,6 +71,8 @@ class Lisp:
         assert isinstance(expr, (Atom, Expression))
 
         if isinstance(expr, Atom):
+            if expr.isdigit():
+                return expr
             return self.env[expr]
         else:
             func, *args = expr
@@ -138,3 +140,19 @@ class Lisp:
     def defun(self, label_name, lambda_args, lambda_body):
         new_code = ['label', label_name, ['lambda', lambda_args, lambda_body]]
         return self.eval_expr(new_code)
+
+    def add(self, *args):
+        vals = [int(self.child_eval(arg)) for arg in args]
+        return Atom(sum(vals))
+
+    def sub(self, arg1, arg2):
+        val1 = self.child_eval(arg1)
+        val2 = self.child_eval(arg2)
+        return Atom(int(val1) - int(val2))
+
+    def lt(self, arg1, arg2):
+        val1 = self.child_eval(arg1)
+        val2 = self.child_eval(arg2)
+        if int(val1) < int(val2):
+            return 't'
+        return []

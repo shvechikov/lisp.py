@@ -106,7 +106,27 @@ hard_tests = [
         (separate '(a b c))
 
         --> (a | b | c)
+    """,
+
+    "(add 1 2 3 4 5) --> 15",
+    "(sub 10 3) --> 7",
+    "(lt 3 5) --> t",
+    "(lt 7 5) --> ()",
+
     """
+        (label + add)
+        (label - sub)
+        (label < lt)
+
+        (defun fib (n)
+            (cond ((< n 2) n)
+                  ('t (+ (fib (- n 1))
+                         (fib (- n 2))))))
+
+        (fib 10)
+
+        --> 55
+    """,
 ]
 
 meta_tests = [
