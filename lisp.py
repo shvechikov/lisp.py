@@ -1,8 +1,7 @@
 import re
 
 
-Atom = str
-Expression = list
+Atom, Expression = str, list
 
 
 def tokenize(source):
@@ -36,7 +35,7 @@ def parse(source):
     """Return list of parsed expressions."""
     tokens = tokenize(source)
     expr_list, remaining_tokens = parse_body(tokens)
-    assert not remaining_tokens, 'Bad trailing tokens: {}'.format(remaining_tokens)
+    assert not remaining_tokens, 'Bad trailing tokens: %r' % remaining_tokens
     return expr_list
 
 
@@ -44,59 +43,54 @@ def is_atom_or_nil(data):
     return isinstance(data, Atom) or data == []
 
 
-def is_pair(pair):
-    return isinstance(pair, Expression) and len(pair) == 2
+def is_pair(data):
+    return isinstance(data, Expression) and len(data) == 2
 
 
-class Interpreter:
+class Lisp:
     BUILTIN_FUNCTIONS = 'quote atom eq car cdr cons cond label defun'.split()
 
     def __init__(self, env=None):
         self.env = env or {}
 
     def eval(self, source):
-        """Evaluate a sequence of expressions by chaining environments."""
+        """Evaluate a sequence of expressions in shared environment."""
         result = Expression()
         commands = parse(source)
         for command in commands:
             result = self.eval_expr(command)
         return result
 
-    def eval_expr(self, code):
-        assert isinstance(code, (Atom, Expression))
-
-        if isinstance(code, Atom):
-            return self.env[code]
-
-        if isinstance(code[0], Atom):
-            func_name = code[0]
-            args = code[1:]
-            if func_name in self.BUILTIN_FUNCTIONS:
-                builtin_func = getattr(self, func_name)
-                return builtin_func(*args)
-            else:
-                user_func = self.env[func_name]
-                return self.child_eval([user_func] + args)
-
-        if isinstance(code[0], Expression):
-            assert code[0][0] == 'lambda', 'Bad callable expression: {}'.format(code[0])
-            _, arg_names, lambda_body = code[0]
-            arg_values = code[1:]
-            assert isinstance(arg_names, Expression)
-            assert len(arg_names) == len(code) - 1
-            func_env = {
-                arg: self.child_eval(val)
-                for arg, val in zip(arg_names, arg_values)
-            }
-            return self.child_eval(lambda_body, extra_env=func_env)
-
-        raise RuntimeError('Unknown command: {}'.format(code[0]))
-
-    def child_eval(self, code, extra_env=None):
+    def child_eval(self, expr, extra_env=None):
         child_env = self.env.copy()
         if extra_env:
             child_env.update(extra_env)
-        return Interpreter(child_env).eval_expr(code)
+        return Lisp(child_env).eval_expr(expr)
+
+    def eval_expr(self, expr):
+        assert isinstance(expr, (Atom, Expression))
+
+        if isinstance(expr, Atom):
+            return self.env[expr]
+        else:
+            func, *args = expr
+            if isinstance(func, Atom):
+                if func in self.BUILTIN_FUNCTIONS:
+                    builtin_func = getattr(self, func)
+                    return builtin_func(*args)
+                else:
+                    user_func = self.env[func]
+                    return self.child_eval([user_func, *args])
+            else:
+                assert func[0] == 'lambda', 'Bad callable expression: %r' % func
+                _, arg_names, lambda_body = func
+                assert isinstance(arg_names, Expression)
+                assert len(arg_names) == len(args)
+                func_env = {
+                    arg_name: self.child_eval(arg)
+                    for arg_name, arg in zip(arg_names, args)
+                }
+                return self.child_eval(lambda_body, extra_env=func_env)
 
     # Builtin functions:
 
@@ -118,15 +112,15 @@ class Interpreter:
         return val[0] if val else []
 
     def cdr(self, arg):
-        value = self.child_eval(arg)
-        assert isinstance(value, Expression)
-        return value[1:] if value else []
+        val = self.child_eval(arg)
+        assert isinstance(val, Expression)
+        return val[1:] if val else []
 
     def cons(self, arg1, arg2):
         val1 = self.child_eval(arg1)
         val2 = self.child_eval(arg2)
         assert isinstance(val2, Expression)
-        return [val1] + val2
+        return [val1, *val2]
 
     def cond(self, *pairs):
         assert all(is_pair(pair) for pair in pairs)

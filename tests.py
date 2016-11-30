@@ -1,6 +1,6 @@
 import pytest
 
-from lisp import tokenize, parse, Interpreter
+from lisp import tokenize, parse, Lisp
 
 
 META_LISP = open('meta.lisp').read()
@@ -9,14 +9,12 @@ META_LISP = open('meta.lisp').read()
 def meta_eval(meta_code, env=None):
     """Evaluate expression using MetaLISP."""
     source = META_LISP + meta_code
-    interpreter = Interpreter(env)
-    return interpreter.eval(source)
+    return Lisp(env).eval(source)
 
 
 def e(source):
     """Shortcut for evaluating expressions in tests."""
-    interpreter = Interpreter()
-    return interpreter.eval(source)
+    return Lisp().eval(source)
 
 
 def p(source):
