@@ -54,47 +54,61 @@ class Lisp:
         self.env = env or {}
 
     def eval(self, source):
-        """Evaluate a sequence of expressions in shared environment."""
+        """Evaluate LISP-code (a sequence of expressions) in shared environment."""
         result = Expression()
-        commands = parse(source)
-        for command in commands:
-            result = self.eval_expr(command)
+        expressions = parse(source)
+        for expr in expressions:
+            result = self.eval_expr(expr)
         return result
-
-    def child_eval(self, expr, extra_env=None):
-        child_env = self.env.copy()
-        if extra_env:
-            child_env.update(extra_env)
-        return Lisp(child_env).eval_expr(expr)
 
     def eval_expr(self, expr):
         assert isinstance(expr, (Atom, Expression))
-
         if isinstance(expr, Atom):
             if expr.isdigit():
                 return expr
             return self.env[expr]
         else:
             func, *args = expr
-            if isinstance(func, Atom):
-                if func in self.BUILTIN_FUNCTIONS:
-                    builtin_func = getattr(self, func)
-                    return builtin_func(*args)
-                else:
-                    user_func = self.env[func]
-                    return self.child_eval([user_func, *args])
-            else:
-                assert func[0] == 'lambda', 'Bad callable expression: %r' % func
-                _, arg_names, lambda_body = func
-                assert isinstance(arg_names, Expression)
-                assert len(arg_names) == len(args)
-                func_env = {
-                    arg_name: self.child_eval(arg)
-                    for arg_name, arg in zip(arg_names, args)
-                }
-                return self.child_eval(lambda_body, extra_env=func_env)
+            return self.eval_func(func, *args)
 
-    # Builtin functions:
+    def eval_func(self, func, *args):
+        """Evaluate a function of any kind.
+
+        It could be:
+            - a builtin function,
+            - a function defined by user via defun or label,
+            - inline lambda expression call.
+
+        """
+        if isinstance(func, Atom):
+            if func in self.BUILTIN_FUNCTIONS:
+                builtin_func = getattr(self, func)
+                return builtin_func(*args)
+            else:
+                # Convert user-defined function to inline lambda call
+                user_func = self.env[func]
+                return self.eval_func(user_func, *args)
+        else:
+            assert func[0] == 'lambda', 'Bad callable expression: %r' % func
+
+            _, arg_names, lambda_body = func
+            assert isinstance(arg_names, Expression)
+            assert len(arg_names) == len(args)
+
+            func_env = {
+                arg_name: self.child_eval(arg)
+                for arg_name, arg in zip(arg_names, args)
+            }
+            return self.child_eval(lambda_body, extra_env=func_env)
+
+    def child_eval(self, expr, extra_env=None):
+        """Evaluate a single expression in isolated environment and return the result."""
+        child_env = self.env.copy()
+        if extra_env:
+            child_env.update(extra_env)
+        return Lisp(child_env).eval_expr(expr)
+
+    # Builtin LISP functions:
 
     def quote(self, arg):
         return arg
@@ -140,6 +154,8 @@ class Lisp:
     def defun(self, label_name, lambda_args, lambda_body):
         new_code = ['label', label_name, ['lambda', lambda_args, lambda_body]]
         return self.eval_expr(new_code)
+
+    # Trivial arithmetic functions:
 
     def add(self, *args):
         vals = [int(self.child_eval(arg)) for arg in args]

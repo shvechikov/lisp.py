@@ -7,7 +7,7 @@ META_LISP = open('meta.lisp').read()
 
 
 def meta_eval(meta_code, env=None):
-    """Evaluate expression using MetaLISP."""
+    """Evaluate expression using MetaLISP - LISP in LISP."""
     source = META_LISP + meta_code
     return Lisp(env).eval(source)
 
@@ -18,8 +18,10 @@ def e(source):
 
 
 def p(source):
-    """Shortcut for parsing single expression."""
-    return parse(source)[0]
+    """Shortcut for parsing a single expression in tests."""
+    expressions = parse(source)
+    assert len(expressions) == 1
+    return expressions[0]
 
 
 def test_tokenizer():
@@ -43,6 +45,7 @@ def test_parser():
         parse('(g(')
 
 
+# These tests work in both "LISP in Python" implementation and "LISP in "LISP in Python"" :)
 base_tests = [
     "(quote a) --> a",
     "'a --> a",
@@ -79,6 +82,8 @@ base_tests = [
     """,
 ]
 
+# Next tests are multi-line and more tricky (with arithmetic inside!)
+# so they works only in the first level of Matrix :)
 hard_tests = [
     """
         (label l (a b c))
@@ -129,6 +134,10 @@ hard_tests = [
     """,
 ]
 
+
+# This couple of tests was made to check the special form of (label f (lambda ...))
+# expression which was implemented in the canonical McCarthy's LISP in LISP.
+# It allows us to create recursive functions.
 meta_tests = [
     """
         ((label wrap (lambda (x) (cons x '()))) 'wrap_me)
