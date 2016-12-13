@@ -7,7 +7,7 @@ META_LISP = open('meta.lisp').read()
 
 
 def meta_eval(meta_code, env=None):
-    """Evaluate expression using MetaLISP - LISP in LISP."""
+    """Evaluate an expression using MetaLISP - LISP in LISP."""
     source = META_LISP + meta_code
     return Lisp(env).eval(source)
 

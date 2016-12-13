@@ -11,7 +11,7 @@ def tokenize(source):
 
 
 def parse_expr(tokens):
-    """Parse single expression. Return it and remaining tokens."""
+    """Parse a single expression. Return it and remaining tokens."""
     if tokens[0] == "'":
         expr, tokens = parse_expr(tokens[1:])
         return ['quote', expr], tokens
@@ -23,7 +23,7 @@ def parse_expr(tokens):
 
 
 def parse_body(tokens):
-    """Parse list of expressions. Return them and remaining tokens."""
+    """Parse a list of expressions. Return them and remaining tokens."""
     if tokens and tokens[0] != ')':
         first_expr, tokens = parse_expr(tokens)
         rest_list, tokens = parse_body(tokens)
@@ -32,7 +32,7 @@ def parse_body(tokens):
 
 
 def parse(source):
-    """Return list of parsed expressions."""
+    """Return a list of parsed expressions."""
     tokens = tokenize(source)
     expr_list, remaining_tokens = parse_body(tokens)
     assert not remaining_tokens, 'Bad trailing tokens: %r' % remaining_tokens
@@ -48,6 +48,16 @@ def is_pair(data):
 
 
 class Lisp:
+    """The LISP interpreter bound with environment you pass.
+
+    >>> env = {
+    ...     'hey': 'Hello',
+    ...     'universe': ['world!'],
+    ... }
+    >>> Lisp(env).eval("(cons hey universe)")
+    ['Hello', 'world!']
+
+    """
     BUILTIN_FUNCTIONS = 'quote atom eq car cdr cons cond label defun add sub lt'.split()
 
     def __init__(self, env=None):
@@ -62,6 +72,7 @@ class Lisp:
         return result
 
     def eval_expr(self, expr):
+        """Evaluate a single expression."""
         assert isinstance(expr, (Atom, Expression))
         if isinstance(expr, Atom):
             if expr.isdigit():
