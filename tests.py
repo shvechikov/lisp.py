@@ -83,7 +83,7 @@ base_tests = [
 ]
 
 # Next tests are multi-line and more tricky (with arithmetic inside!)
-# so they works only in the first level of Matrix :)
+# so they work only in the first level of Matrix :)
 hard_tests = [
     """
         (label l (a b c))
