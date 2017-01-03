@@ -1,6 +1,6 @@
 # LISP in LISP in Python
 
-It is a result of a little practical experiment that was done during reading
+This little project was created to understand how LISP works. It was done after reading
 [The Roots of LISP][1] — a great article by Paul Graham.
 
 The challenge was to create from scratch a basic LISP interpreter in Python
