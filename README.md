@@ -1,7 +1,7 @@
 # LISP in LISP in Python
 
-This little project was created to understand how LISP works. It was done after reading
-[The Roots of LISP][1] — a great article by Paul Graham.
+This little project was created to understand how LISP works. I started to work on it after reading
+[The Roots of LISP][1] — an excellent article by Paul Graham.
 
 The challenge was to create from scratch a basic LISP interpreter in Python
 and then — as a proof of the completeness — test it by running the canonical
@@ -16,7 +16,7 @@ You can run the tests by calling:
 
     $ make test
 
-The only requirement is Python 3.5 or greater.
+The only requirement is Python 3.5 or higher.
 
 [1]: http://www.paulgraham.com/rootsoflisp.html
 [2]: http://pytest.org/
